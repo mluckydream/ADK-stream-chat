@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADK Streaming Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f4f4f9;
+    }
+    h1 {
+      margin-bottom: 20px;
+      color: #333;
+    }
+    #messages {
+      width: 80%;
+      max-width: 600px;
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      background-color: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    #messages p {
+      margin: 5px 0;
+    }
+    #messageForm {
+      display: flex;
+      width: 80%;
+      max-width: 600px;
+      margin-top: 20px;
+    }
+    #messageForm label {
+      margin-right: 10px;
+      align-self: center;
+    }
+    #messageForm input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    #messageForm button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      background-color: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    #messageForm button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>ADK Streaming Test</h1>
+  <div id="messages"></div>
+  <br />
+  <form id="messageForm">
+    <label for="message">Message:</label>
+    <input type="text" id="message" name="message" autofocus />
+    <button type="submit" id="sendButton" disabled>Send</button>
+  </form>
+
+  <script>
+    // Connect the server with a WebSocket connection
+    const sessionId = Math.random().toString().substring(10);
+    const ws_url = "ws://" + window.location.host + "/ws/" + sessionId;
+    let ws = new WebSocket(ws_url);
+
+    // Get DOM elements
+    const messageForm = document.getElementById("messageForm");
+    const messageInput = document.getElementById("message");
+    const messagesDiv = document.getElementById("messages");
+    let currentMessageId = null;
+
+    // WebSocket handlers
+    function addWebSocketHandlers(ws) {
+      ws.onopen = function () {
+        console.log("WebSocket connection opened.");
+        document.getElementById("sendButton").disabled = false;
+        const message = document.createElement("p");
+        message.textContent = "Connection opened";
+        messagesDiv.appendChild(message);
+        addSubmitHandler(this);
+      };
+
+      ws.onmessage = function (event) {
+        // Parse the incoming message
+        const packet = JSON.parse(event.data);
+        console.log(packet);
+
+        // Check if the turn is complete
+        if (packet.turn_complete && packet.turn_complete == true) {
+          currentMessageId = null;
+          return;
+        }
+
+        // Add a new message for a new turn
+        if (currentMessageId == null) {
+          currentMessageId = Math.random().toString(36).substring(7);
+          const message = document.createElement("p");
+          message.id = currentMessageId;
+          messagesDiv.appendChild(message);
+        }
+
+        // Add message text to the existing message element
+        const message = document.getElementById(currentMessageId);
+        message.textContent += packet.message;
+
+        // Scroll down to the bottom of the messagesDiv
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      };
+
+      // When the connection is closed, try reconnecting
+      ws.onclose = function () {
+        console.log("WebSocket connection closed.");
+        document.getElementById("sendButton").disabled = true;
+        const message = document.createElement("p");
+        message.textContent = "Connection closed";
+        messagesDiv.appendChild(message);
+        setTimeout(function () {
+          console.log("Reconnecting...");
+          ws = new WebSocket(ws_url);
+          addWebSocketHandlers(ws);
+        }, 5000);
+      };
+
+      ws.onerror = function (e) {
+        console.log("WebSocket error: ", e);
+      };
+    }
+    addWebSocketHandlers(ws);
+
+    // Add submit handler to the form
+    function addSubmitHandler(ws) {
+      messageForm.onsubmit = function (e) {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        if (message) {
+          const p = document.createElement("p");
+          p.textContent = "> " + message;
+          messagesDiv.appendChild(p);
+          ws.send(message);
+          messageInput.value = "";
+          messageInput.focus();
+        }
+        return false;
+      };
+
+      // Enable send button when input is not empty
+      messageInput.addEventListener('input', function() {
+        document.getElementById("sendButton").disabled = messageInput.value.trim() === '';
+      });
+    }
+  </script>
+</body>
+</html>
